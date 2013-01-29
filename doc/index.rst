@@ -6,6 +6,8 @@ Silex
 
     intro
     usage
+    middlewares
+    organizing_controllers
     services
     providers
     testing
