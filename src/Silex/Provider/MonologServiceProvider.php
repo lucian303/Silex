@@ -18,6 +18,7 @@ use Silex\ServiceProviderInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Bridge\Monolog\Handler\DebugHandler;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
  * Monolog Provider.
@@ -65,17 +66,17 @@ class MonologServiceProvider implements ServiceProviderInterface
 
     public function boot(Application $app)
     {
-        // BC: to be removed before 1.0
-        if (isset($app['monolog.class_path'])) {
-            throw new \RuntimeException('You have provided the monolog.class_path parameter. The autoloader has been removed from Silex. It is recommended that you use Composer to manage your dependencies and handle your autoloading. If you are already using Composer, you can remove the parameter. See http://getcomposer.org for more information.');
-        }
-
         $app->before(function (Request $request) use ($app) {
             $app['monolog']->addInfo('> '.$request->getMethod().' '.$request->getRequestUri());
         });
 
         $app->error(function (\Exception $e) use ($app) {
-            $app['monolog']->addError($e->getMessage());
+            $message = sprintf('%s: %s (uncaught exception) at %s line %s', get_class($e), $e->getMessage(), $e->getFile(), $e->getLine());
+            if ($e instanceof HttpExceptionInterface && $e->getStatusCode() < 500) {
+                $app['monolog']->addError($message);
+            } else {
+                $app['monolog']->addCritical($message);
+            }
         }, 255);
 
         $app->after(function (Request $request, Response $response) use ($app) {

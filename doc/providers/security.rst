@@ -35,6 +35,8 @@ Services
 * **security.encoder_factory**: Defines the encoding strategies for user
   passwords (default to use a digest algorithm for all users).
 
+* **security.encoder.digest**: The encoder to use by default for all users.
+
 .. note::
 
     The service provider defines many other services that are used internally
@@ -45,7 +47,9 @@ Registering
 
 .. code-block:: php
 
-    $app->register(new Silex\Provider\SecurityServiceProvider());
+    $app->register(new Silex\Provider\SecurityServiceProvider(), array(
+        'security.firewalls' => // see below
+    ));
 
 .. note::
 
@@ -58,6 +62,14 @@ Registering
         "require": {
             "symfony/security": "2.1.*"
         }
+
+.. caution::
+
+    The security features are only available after the Application has been
+    booted. So, if you want to use it outside of the handling of a request,
+    don't forget to call ``boot()`` first::
+
+        $application->boot();
 
 Usage
 -----
@@ -89,7 +101,7 @@ is known, you can get it with a call to ``getUser()``::
         $user = $token->getUser();
     }
 
-The user can be a string, and object with a ``__toString()`` method, or an
+The user can be a string, an object with a ``__toString()`` method, or an
 instance of `UserInterface
 <http://api.symfony.com/master/Symfony/Component/Security/Core/User/UserInterface.html>`_.
 
@@ -235,16 +247,33 @@ The order of the firewall configurations is significant as the first one to
 match wins. The above configuration first ensures that the ``/login`` URL is
 not secured (no authentication settings), and then it secures all other URLs.
 
+.. tip::
+
+    You can toggle all registered authentication mechanisms for a particular
+    area on and off with the ``security`` flag::
+
+        $app['security.firewalls'] = array(
+            'api' => array(
+                'pattern' => '^/api',
+                'security' => $app['debug'] ? false : true,
+                'wsse' => true,
+
+                // ...
+            ),
+        );
+
 Adding a Logout
 ~~~~~~~~~~~~~~~
 
 When using a form for authentication, you can let users log out if you add the
-``logout`` setting::
+``logout`` setting, where ``logout_path`` must match the main firewall
+pattern::
 
     $app['security.firewalls'] = array(
         'secured' => array(
+            'pattern' => '^/admin/',
             'form' => array('login_path' => '/login', 'check_path' => '/admin/login_check'),
-            'logout' => array('logout_path' => '/logout'),
+            'logout' => array('logout_path' => '/admin/logout'),
 
             // ...
         ),
@@ -255,7 +284,7 @@ are replaced with ``_`` and the leading ``/`` is stripped):
 
 .. code-block:: jinja
 
-    <a href="{{ path('logout') }}">Logout</a>
+    <a href="{{ path('admin_logout') }}">Logout</a>
 
 Allowing Anonymous Users
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -282,7 +311,7 @@ Checking User Roles
 To check if a user is granted some role, use the ``isGranted()`` method on the
 security context::
 
-    if ($app['security']->isGranted('ROLE_ADMIN') {
+    if ($app['security']->isGranted('ROLE_ADMIN')) {
         // ...
     }
 
@@ -294,7 +323,7 @@ You can check roles in Twig templates too:
         <a href="/secured?_switch_user=fabien">Switch to Fabien</a>
     {% endif %}
 
-You can check is a user is "fully authenticated" (not an anonymous user for
+You can check if a user is "fully authenticated" (not an anonymous user for
 instance) with the special ``IS_AUTHENTICATED_FULLY`` role:
 
 .. code-block:: jinja
@@ -304,6 +333,8 @@ instance) with the special ``IS_AUTHENTICATED_FULLY`` role:
     {% else %}
         <a href="{{ path('login') }}">Login</a>
     {% endif %}
+
+Of course you will need to define a ``login`` route for this to work.
 
 .. tip::
 
@@ -466,8 +497,17 @@ sample users::
 
         $schema->createTable($users);
 
-        $app['db']->executeQuery('INSERT INTO users (username, password, roles) VALUES ("fabien", "5FZ2Z8QIkA7UTZ4BYkoC+GsReLf569mSKDsfods6LYQ8t+a8EW9oaircfMpmaLbPBh4FOBiiFyLfuZmTSUwzZg==", "ROLE_USER")');
-        $app['db']->executeQuery('INSERT INTO users (username, password, roles) VALUES ("admin", "5FZ2Z8QIkA7UTZ4BYkoC+GsReLf569mSKDsfods6LYQ8t+a8EW9oaircfMpmaLbPBh4FOBiiFyLfuZmTSUwzZg==", "ROLE_ADMIN")');
+        $app['db']->insert('users', array(
+          'username' => 'fabien',
+          'password' => '5FZ2Z8QIkA7UTZ4BYkoC+GsReLf569mSKDsfods6LYQ8t+a8EW9oaircfMpmaLbPBh4FOBiiFyLfuZmTSUwzZg==',
+          'roles' => 'ROLE_USER'
+        ));
+
+        $app['db']->insert('users', array(
+          'username' => 'admin',
+          'password' => '5FZ2Z8QIkA7UTZ4BYkoC+GsReLf569mSKDsfods6LYQ8t+a8EW9oaircfMpmaLbPBh4FOBiiFyLfuZmTSUwzZg==',
+          'roles' => 'ROLE_ADMIN'
+        ));
     }
 
 .. tip::
@@ -475,6 +515,23 @@ sample users::
     If you are using the Doctrine ORM, the Symfony bridge for Doctrine
     provides a user provider class that is able to load users from your
     entities.
+
+Defining a custom Encoder
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, Silex uses the ``sha512`` algorithm to encode passwords.
+Additionally, the password is encoded multiple times and converted to base64.
+You can change these defaults by overriding the ``security.encoder.digest``
+service::
+
+    use Symfony\Component\Security\Core\Encoder\MessageDigestPasswordEncoder;
+
+    $app['security.encoder.digest'] = $app->share(function ($app) {
+        // use the sha1 algorithm
+        // don't base64 encode the password
+        // use only 1 iteration
+        return new MessageDigestPasswordEncoder('sha1', false, 1);
+    });
 
 Defining a custom Authentication Provider
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -527,6 +584,23 @@ argument of your authentication factory (see above).
 
 This example uses the authentication provider classes as described in the
 Symfony `cookbook`_.
+
+Stateless Authentication
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, a session cookie is created to persist the security context of
+the user. However, if you use certificates, HTTP authentication, WSSE and so
+on, the credentials are sent for each request. In that case, you can turn off
+persistence by activating the ``stateless`` authentication flag::
+
+    $app['security.firewalls'] = array(
+        'default' => array(
+            'stateless' => true,
+            'wsse' => true,
+
+            // ...
+        ),
+    );
 
 Traits
 ------

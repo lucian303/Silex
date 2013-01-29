@@ -17,11 +17,11 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Error handler test cases.
+ * Middleware test cases.
  *
  * @author Igor Wiedler <igor@wiedler.ch>
  */
-class BeforeAfterFilterTest extends \PHPUnit_Framework_TestCase
+class MiddlewareTest extends \PHPUnit_Framework_TestCase
 {
     public function testBeforeAndAfterFilter()
     {
@@ -147,7 +147,7 @@ class BeforeAfterFilterTest extends \PHPUnit_Framework_TestCase
 
         $app->before(function () use (&$i) {
             $i++;
-        });
+        }, Application::EARLY_EVENT);
 
         $app->after(function () use (&$i) {
             $i++;
@@ -193,18 +193,18 @@ class BeforeAfterFilterTest extends \PHPUnit_Framework_TestCase
         $app = new Application();
 
         $app->before(function () use ($app) {
-            $app['locale'] = $app['request']->get('locale');
+            $app['project'] = $app['request']->get('project');
         });
 
-        $app->match('/foo/{locale}', function () use ($app) {
-            return $app['locale'];
+        $app->match('/foo/{project}', function () use ($app) {
+            return $app['project'];
         });
 
-        $request = Request::create('/foo/en');
-        $this->assertEquals('en', $app->handle($request)->getContent());
+        $request = Request::create('/foo/bar');
+        $this->assertEquals('bar', $app->handle($request)->getContent());
 
-        $request = Request::create('/foo/de');
-        $this->assertEquals('de', $app->handle($request)->getContent());
+        $request = Request::create('/foo/baz');
+        $this->assertEquals('baz', $app->handle($request)->getContent());
     }
 
     public function testBeforeFilterAccessesRequestAndCanReturnResponse()

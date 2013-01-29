@@ -25,7 +25,7 @@ If you want more flexibility, use Composer instead. Create a
 
     {
         "require": {
-            "silex/silex": "1.0.*"
+            "silex/silex": "1.0.*@dev"
         }
     }
 
@@ -67,8 +67,8 @@ definitions, call the ``run`` method on your application::
 
     $app->run();
 
-Then, you have to configure your web server (read the dedicated chapter for
-more information).
+Then, you have to configure your web server (read the :doc:`dedicated chapter
+<web_servers>` for more information).
 
 .. tip::
 
@@ -100,7 +100,7 @@ A route pattern consists of:
   pattern can include variable parts and you are able to set RegExp
   requirements for them.
 
-* *Method*: One of the following HTTP methods: ``GET``, ``POST``, ``PUT``
+* *Method*: One of the following HTTP methods: ``GET``, ``POST``, ``PUT`` or
   ``DELETE``. This describes the interaction with the resource. Commonly only
   ``GET`` and ``POST`` are used, but it is possible to use the others as well.
 
@@ -122,10 +122,6 @@ import local variables of that function.
     will not make a distinction here.
 
 The return value of the closure becomes the content of the page.
-
-There is also an alternate way for defining controllers using a class method.
-The syntax for that is ``ClassName::methodName``. Static methods are also
-possible.
 
 Example GET route
 ~~~~~~~~~~~~~~~~~
@@ -383,111 +379,35 @@ really be used. You can give a route a name by calling ``bind`` on the
     It only makes sense to name routes if you use providers that make use of
     the ``RouteCollection``.
 
-Before, after and finish filters
---------------------------------
+Controllers in classes
+~~~~~~~~~~~~~~~~~~~~~~
 
-Silex allows you to run code before, after every request and even after the
-response has been sent. This happens through ``before``, ``after`` and
-``finish`` filters. All you need to do is pass a closure::
+If you don't want to use anonymous functions, you can also define your
+controllers as methods. By using the ``ControllerClass::methodName`` syntax,
+you can tell Silex to lazily create the controller object for you::
 
-    $app->before(function () {
-        // set up
-    });
+    $app->get('/', 'Igorw\Foo::bar');
 
-    $app->after(function () {
-        // tear down
-    });
+    use Silex\Application;
+    use Symfony\Component\HttpFoundation\Request;
 
-    $app->finish(function () {
-        // after response has been sent
-    });
-
-The before filter has access to the current Request, and can short-circuit the
-whole rendering by returning a Response::
-
-    $app->before(function (Request $request) {
-        // redirect the user to the login screen if access to the Resource is protected
-        if (...) {
-            return new RedirectResponse('/login');
+    namespace Igorw
+    {
+        class Foo
+        {
+            public function bar(Request $request, Application $app)
+            {
+                ...
+            }
         }
-    });
+    }
 
-The after filter has access to the Request and the Response::
+This will load the ``Igorw\Foo`` class on demand, create an instance and call
+the ``bar`` method to get the response. You can use ``Request`` and
+``Silex\Application`` type hints to get ``$request`` and ``$app`` injected.
 
-    $app->after(function (Request $request, Response $response) {
-        // tweak the Response
-    });
-
-The finish filter has access to the Request and the Response::
-
-    $app->finish(function (Request $request, Response $response) {
-        // send e-mails ...
-    });
-
-.. note::
-
-    The filters are only run for the "master" Request.
-
-Route middlewares
------------------
-
-Route middlewares are PHP callables which are triggered when their associated
-route is matched:
-
-* ``before`` middlewares are fired just before the route callback, but after
-  the application ``before`` filters;
-
-* ``after`` middlewares are fired just after the route callback, but before
-  the application ``after`` filters.
-
-This can be used for a lot of use cases; for instance, here is a simple
-"anonymous/logged user" check::
-
-    $mustBeAnonymous = function (Request $request) use ($app) {
-        if ($app['session']->has('userId')) {
-            return $app->redirect('/user/logout');
-        }
-    };
-
-    $mustBeLogged = function (Request $request) use ($app) {
-        if (!$app['session']->has('userId')) {
-            return $app->redirect('/user/login');
-        }
-    };
-
-    $app->get('/user/subscribe', function () {
-        ...
-    })
-    ->before($mustBeAnonymous);
-
-    $app->get('/user/login', function () {
-        ...
-    })
-    ->before($mustBeAnonymous);
-
-    $app->get('/user/my-profile', function () {
-        ...
-    })
-    ->before($mustBeLogged);
-
-The ``before`` and ``after`` methods can be called several times for a given
-route, in which case they are triggered in the same order as you added them to
-the route.
-
-For convenience, the ``before`` middlewares are called with the current
-``Request`` instance as an argument and the ``after`` middlewares are called
-with the current ``Request`` and ``Response`` instance as arguments.
-
-If any of the before middlewares returns a Symfony HTTP Response, it will
-short-circuit the whole rendering: the next middlewares won't be run, neither
-the route callback. You can also redirect to another page by returning a
-redirect response, which you can create by calling the Application
-``redirect`` method.
-
-.. note::
-
-    If a before middleware does not return a Symfony HTTP Response or
-    ``null``, a ``RuntimeException`` is thrown.
+For an even stronger separation between Silex and your controllers, you can
+:doc:`define your controllers as services <providers/service_controller>`.
 
 Global Configuration
 --------------------
@@ -501,8 +421,8 @@ middleware, a requirement, or a default value), you can configure it on
         ->assert('id', '\d+')
         ->requireHttps()
         ->method('get')
-        ->convert('id', function () { // ... })
-        ->before(function () { // ... })
+        ->convert('id', function () { /* ... */ })
+        ->before(function () { /* ... */ })
     ;
 
 These settings are applied to already registered controllers and they become
@@ -637,79 +557,10 @@ round-trip to the browser (as for a redirect), use an internal sub-request::
 
         $request = Request::create($app['url_generator']->generate('hello'), 'GET');
 
-Modularity
-----------
-
-When your application starts to define too many controllers, you might want to
-group them logically::
-
-    // define controllers for a blog
-    $blog = $app['controllers_factory'];
-    $blog->get('/', function () {
-        return 'Blog home page';
-    });
-    // ...
-
-    // define controllers for a forum
-    $forum = $app['controllers_factory'];
-    $forum->get('/', function () {
-        return 'Forum home page';
-    });
-
-    // define "global" controllers
-    $app->get('/', function () {
-        return 'Main home page';
-    });
-
-    $app->mount('/blog', $blog);
-    $app->mount('/forum', $forum);
-
-.. note::
-
-    ``$app['controllers_factory']`` is a factory that returns a new instance
-    of ``ControllerCollection`` when used.
-
-``mount()`` prefixes all routes with the given prefix and merges them into the
-main Application. So, ``/`` will map to the main home page, ``/blog/`` to the
-blog home page, and ``/forum/`` to the forum home page.
-
-.. caution::
-
-    When mounting a route collection under ``/blog``, it is not possible to
-    define a route for the ``/blog`` URL. The shortest possible URL is
-    ``/blog/``.
-
-.. note::
-
-    When calling ``get()``, ``match()``, or any other HTTP methods on the
-    Application, you are in fact calling them on a default instance of
-    ``ControllerCollection`` (stored in ``$app['controllers']``).
-
-Another benefit is the ability to apply settings on a set of controllers very
-easily. Building on the example from the middleware section, here is how you
-would secure all controllers for the backend collection::
-
-    $backend = $app['controllers_factory'];
-
-    // ensure that all controllers require logged-in users
-    $backend->before($mustBeLogged);
-
-.. tip::
-
-    For a better readability, you can split each controller collection into a
-    separate file::
-
-        // blog.php
-        $blog = $app['controllers_factory'];
-        $blog->get('/', function () { return 'Blog home page'; });
-
-        return $blog;
-
-        // app.php
-        $app->mount('/blog', include 'blog.php');
-
-    Instead of requiring a file, you can also create a :doc:`Controller
-    provider </providers#controllers-providers>`.
+There's some more things that you need to keep in mind though. In most cases you
+will want to forward some parts of the current master request to the sub-request.
+That includes: Cookies, server information, session.
+Read more on :doc:`how to make sub-requests <cookbook/sub_requests>`.
 
 JSON
 ----
