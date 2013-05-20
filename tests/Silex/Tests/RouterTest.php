@@ -179,6 +179,18 @@ class RouterTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals('/foo/', $response->getTargetUrl());
     }
 
+    public function testHostSpecification()
+    {
+        if (!method_exists('Symfony\Component\Routing\Route', 'setHost')) {
+            $this->markTestSkipped('host() is only supported in the Symfony Routing 2.2+');
+        }
+
+        $route = new \Silex\Route();
+
+        $this->assertSame($route, $route->host('{locale}.example.com'));
+        $this->assertEquals('{locale}.example.com', $route->getHost());
+    }
+
     public function testRequireHttpRedirect()
     {
         $app = new Application();
@@ -205,6 +217,20 @@ class RouterTest extends \PHPUnit_Framework_TestCase
         $request = Request::create('http://example.com/secured');
         $response = $app->handle($request);
         $this->assertTrue($response->isRedirect('https://example.com/secured'));
+    }
+
+    public function testRequireHttpsRedirectIncludesQueryString()
+    {
+        $app = new Application();
+
+        $app->match('/secured', function () {
+            return 'secured content';
+        })
+        ->requireHttps();
+
+        $request = Request::create('http://example.com/secured?query=string');
+        $response = $app->handle($request);
+        $this->assertTrue($response->isRedirect('https://example.com/secured?query=string'));
     }
 
     public function testClassNameControllerSyntax()

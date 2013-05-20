@@ -1,6 +1,35 @@
 Changelog
 =========
 
+1.1.0 (2013-XX-XX)
+------------------
+
+* **2013-05-03: Dropped support for 2.1 and 2.2 versions of symfony.
+
+1.0.0 (2013-05-03)
+------------------
+
+* **2013-04-12**: Added support for validators as services.
+
+* **2013-04-01**: Added support for host matching with symfony 2.2:
+
+      $app->match('/', function() {
+          // app-specific action
+      })->host('example.com');
+
+      $app->match('/', function ($user) {
+          // user-specific action
+      })->host('{user}.example.com');
+
+* **2013-03-08**: Added support for form type extensions and guessers as
+  services.
+
+* **2013-03-08**: Added support for remember-me via the
+  ``RememberMeServiceProvider``.
+
+* **2013-02-07**: Added ``Application::sendFile()`` to ease sending
+  ``BinaryFileResponse``.
+
 * **2012-11-05**: Filters have been renamed to application middlewares in the
   documentation.
 

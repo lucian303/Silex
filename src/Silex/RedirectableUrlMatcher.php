@@ -28,6 +28,11 @@ class RedirectableUrlMatcher extends BaseRedirectableUrlMatcher
     public function redirect($path, $route, $scheme = null)
     {
         $url = $this->context->getBaseUrl().$path;
+        $query = $this->context->getQueryString() ?: '';
+
+        if ($query !== '') {
+            $url .= '?'.$query;
+        }
 
         if ($this->context->getHost()) {
             if ($scheme) {
